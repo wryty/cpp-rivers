@@ -10,6 +10,7 @@
 #include <ctime>
 #include <map>
 #include <algorithm>
+#include <climits>
 
 // Цвета для консоли
 #define COLOR_RESET   "\033[0m"
@@ -213,6 +214,11 @@ public:
     bool importFromCSV(const std::string& filename);
     bool exportToJSON(const std::string& filename);
     bool importFromJSON(const std::string& filename);
+
+    // Генерация идентификаторов
+    int getNextRiverId() { return next_river_id++; }
+    int getNextRegionId() { return next_region_id++; }
+    int getNextEnterpriseId() { return next_enterprise_id++; }
     
     // Получение списков
     std::vector<River> getAllRivers() const { return rivers; }
