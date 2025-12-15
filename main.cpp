@@ -1,5 +1,15 @@
 #include "main.h"
 #include <limits>
+#include <stdexcept>
+
+namespace {
+void ensureTokenCount(const std::vector<std::string>& tokens, size_t expected, const std::string& context) {
+    if (tokens.size() < expected) {
+        throw std::runtime_error("Недостаточно данных для " + context + ": ожидается " +
+            std::to_string(expected) + ", получено " + std::to_string(tokens.size()));
+    }
+}
+}
 
 // Реализация методов класса Enterprise
 Enterprise::Enterprise(int id, const std::string& name, const std::string& activity_type)
@@ -29,7 +39,9 @@ Enterprise Enterprise::fromCSV(const std::string& csvLine) {
     while (std::getline(ss, token, ',')) {
         tokens.push_back(token);
     }
-    
+
+    ensureTokenCount(tokens, 8, "предприятия");
+
     Enterprise enterprise(std::stoi(tokens[0]), tokens[1], tokens[2]);
     enterprise.impact_type = tokens[3];
     enterprise.location.latitude = std::stod(tokens[4]);
@@ -65,7 +77,9 @@ Region Region::fromCSV(const std::string& csvLine) {
     while (std::getline(ss, token, ',')) {
         tokens.push_back(token);
     }
-    
+
+    ensureTokenCount(tokens, 4, "региона");
+
     Region region(std::stoi(tokens[0]), tokens[1], tokens[2]);
     region.basin_percentage = std::stod(tokens[3]);
     
@@ -119,7 +133,9 @@ Ecology Ecology::fromCSV(const std::string& csvLine) {
     while (std::getline(ss, token, ',')) {
         tokens.push_back(token);
     }
-    
+
+    ensureTokenCount(tokens, 8, "экологических данных");
+
     Ecology ecology(std::stoi(tokens[0]));
     ecology.water_quality = tokens[1];
     ecology.pollution_level = std::stoi(tokens[2]);
@@ -177,7 +193,9 @@ EconomicValue EconomicValue::fromCSV(const std::string& csvLine) {
     while (std::getline(ss, token, ',')) {
         tokens.push_back(token);
     }
-    
+
+    ensureTokenCount(tokens, 8, "экономических данных");
+
     EconomicValue economic_value(std::stoi(tokens[0]));
     economic_value.water_supply = (tokens[1] == "1");
     economic_value.energy_generation = (tokens[2] == "1");
@@ -249,7 +267,9 @@ River River::fromCSV(const std::string& csvLine) {
     while (std::getline(ss, token, ',')) {
         tokens.push_back(token);
     }
-    
+
+    ensureTokenCount(tokens, 11, "реки");
+
     River river(std::stoi(tokens[0]), tokens[1]);
     river.length_km = std::stod(tokens[2]);
     river.basin_area_km2 = std::stod(tokens[3]);
@@ -474,6 +494,26 @@ std::vector<River*> RiverDatabase::findRiversByWaterQuality(const std::string& q
     for (auto& ecology : ecologies) {
         if (ecology.water_quality == quality) {
             River* river = findRiver(ecology.river_id);
+            if (river) {
+                result.push_back(river);
+            }
+        }
+    }
+    return result;
+}
+
+std::vector<River*> RiverDatabase::findRiversByUsage(const std::string& usage_type) {
+    std::vector<River*> result;
+    for (auto& economic_value : economic_values) {
+        bool matches =
+            (usage_type == "water_supply" && economic_value.water_supply) ||
+            (usage_type == "energy_generation" && economic_value.energy_generation) ||
+            (usage_type == "fishing" && economic_value.fishing) ||
+            (usage_type == "navigation" && economic_value.navigation) ||
+            (usage_type == "irrigation" && economic_value.irrigation);
+
+        if (matches) {
+            River* river = findRiver(economic_value.river_id);
             if (river) {
                 result.push_back(river);
             }
@@ -726,7 +766,7 @@ void ConsoleUI::addRiver() {
     }
     
     // Создаем новую реку
-    River river(database.getAllRivers().size() + 1, name);
+    River river(database.getNextRiverId(), name);
     
     river.length_km = getDoubleInput("Длина реки (км): ", 0.1, 10000.0);
     river.basin_area_km2 = getDoubleInput("Площадь бассейна (км²): ", 0.1, 1000000.0);
@@ -778,7 +818,7 @@ void ConsoleUI::editRiver() {
         return;
     }
     
-    int river_id = getIntInput("Введите ID реки для редактирования: ", 1, database.getRiverCount());
+    int river_id = getIntInput("Введите ID реки для редактирования: ", 1, std::numeric_limits<int>::max());
     
     River* river = database.findRiver(river_id);
     if (!river) {
@@ -812,7 +852,7 @@ void ConsoleUI::deleteRiver() {
         return;
     }
     
-    int river_id = getIntInput("Введите ID реки для удаления: ", 1, database.getRiverCount());
+    int river_id = getIntInput("Введите ID реки для удаления: ", 1, std::numeric_limits<int>::max());
     
     River* river = database.findRiver(river_id);
     if (!river) {
@@ -908,7 +948,7 @@ void ConsoleUI::manageEcology() {
         return;
     }
     
-    int river_id = getIntInput("Введите ID реки: ", 1, database.getRiverCount());
+    int river_id = getIntInput("Введите ID реки: ", 1, std::numeric_limits<int>::max());
     
     River* river = database.findRiver(river_id);
     if (!river) {
@@ -980,7 +1020,7 @@ void ConsoleUI::manageEnterprises() {
         std::string name = getStringInput("Название предприятия: ");
         std::string activity_type = getStringInput("Тип деятельности: ");
         
-        Enterprise enterprise(database.getAllEnterprises().size() + 1, name, activity_type);
+        Enterprise enterprise(database.getNextEnterpriseId(), name, activity_type);
         
         std::cout << "Тип воздействия:" << std::endl;
         std::cout << "1 - Точечный" << std::endl;
@@ -1023,7 +1063,7 @@ void ConsoleUI::manageRegions() {
         std::string name = getStringInput("Название региона: ");
         std::string admin_center = getStringInput("Административный центр: ");
         
-        Region region(database.getAllRegions().size() + 1, name, admin_center);
+        Region region(database.getNextRegionId(), name, admin_center);
         region.basin_percentage = getDoubleInput("Процент территории бассейна в регионе: ", 0, 100);
         
         database.addRegion(region);
@@ -1112,12 +1152,13 @@ void ConsoleUI::generateReports() {
 
 void ConsoleUI::manageImportExport() {
     printHeader("ЭКСПОРТ ДАННЫХ");
-    
+
     std::cout << "Опции:" << std::endl;
     std::cout << COLOR_BLUE << "1" << COLOR_RESET << " - Экспорт в CSV" << std::endl;
-    
+    std::cout << COLOR_BLUE << "2" << COLOR_RESET << " - Вернуться" << std::endl;
+
     int choice = getIntInput("Выберите опцию: ", 1, 2);
-    
+
     if (choice == 1) {
         std::string filename = getStringInput("Введите имя файла для экспорта: ");
         if (database.exportToCSV(filename)) {
@@ -1125,6 +1166,8 @@ void ConsoleUI::manageImportExport() {
         } else {
             printError("Ошибка при экспорте данных.");
         }
+    } else {
+        printInfo("Возврат в главное меню.");
     }
 }
 
@@ -1157,31 +1200,31 @@ void ConsoleUI::populateTestData() {
     printHeader("ЗАГРУЗКА ТЕСТОВЫХ ДАННЫХ");
     
     // Добавляем регионы
-    Region region1(1, "Московская область", "Москва");
+    Region region1(database.getNextRegionId(), "Московская область", "Москва");
     region1.basin_percentage = 15.5;
     database.addRegion(region1);
-    
-    Region region2(2, "Тверская область", "Тверь");
+
+    Region region2(database.getNextRegionId(), "Тверская область", "Тверь");
     region2.basin_percentage = 22.3;
     database.addRegion(region2);
     
     // Добавляем предприятия
-    Enterprise enterprise1(1, "Мосводоканал", "коммунальные службы");
+    Enterprise enterprise1(database.getNextEnterpriseId(), "Мосводоканал", "коммунальные службы");
     enterprise1.impact_type = "point";
     enterprise1.location = Coordinates(55.7558, 37.6173);
     enterprise1.contact_phone = "+7-495-123-45-67";
     enterprise1.contact_email = "info@mosvodokanal.ru";
     database.addEnterprise(enterprise1);
-    
-    Enterprise enterprise2(2, "Завод Сталь", "промышленность");
+
+    Enterprise enterprise2(database.getNextEnterpriseId(), "Завод Сталь", "промышленность");
     enterprise2.impact_type = "point";
     enterprise2.location = Coordinates(56.8587, 35.9176);
     enterprise2.contact_phone = "+7-4822-55-66-77";
     enterprise2.contact_email = "office@zavodstal.ru";
     database.addEnterprise(enterprise2);
-    
+
     // Добавляем реки
-    River river1(1, "Волга");
+    River river1(database.getNextRiverId(), "Волга");
     river1.length_km = 3530;
     river1.basin_area_km2 = 1360000;
     river1.avg_flow_m3s = 8060;
@@ -1193,7 +1236,7 @@ void ConsoleUI::populateTestData() {
     river1.addEnterprise(2);
     database.addRiver(river1);
     
-    River river2(2, "Ока");
+    River river2(database.getNextRiverId(), "Ока");
     river2.length_km = 1500;
     river2.basin_area_km2 = 245000;
     river2.avg_flow_m3s = 1258;
